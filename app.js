@@ -690,12 +690,99 @@ $('#btn-export').addEventListener('click', () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 });
 
+/* ---------- ビブリア（読書管理ビブリア）のCSVを読み込む ---------- */
+// 見出し行なしの14列：1タイトル 3作者 5出版社 6ISBN 7登録日 8タグ 9メモ 10書影URL 11楽天URL 12更新日 …
+function parseCSV(text) {
+  const rows = [];
+  let row = [], cell = '', q = false;
+  text = text.replace(/^﻿/, '');
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+      else cell += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(cell); cell = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell); rows.push(row); row = []; cell = '';
+    } else cell += ch;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter(r => r.some(c => c.trim()));
+}
+
+const looksLikeBiblia = rows => rows.length && rows.every(r => r.length >= 11) && rows.some(r => looksLikeIsbn(r[5] || ''));
+
+// タイトルからジャンルを推測（あなたの本棚にあるジャンルだけ）
+const GENRE_HINTS = [
+  ['生成AI', /ChatGPT|GPT|生成AI|\bAI\b|ＡＩ|人工知能|プロンプト|Claude|ディープラーニング|機械学習/i],
+  ['子育て', /子育て|育て|子ども|子供|わが子|ママ|お母さん|親の|中学受験|学習法|身長/],
+  ['ビジネス', /仕事|ビジネス|事業|アイデア|お金|経営|マーケティング|プロトタイピング/],
+];
+const guessGenre = title => (GENRE_HINTS.find(([g, re]) => genres.includes(g) && re.test(title)) || [''])[0];
+
+// タグ（自宅本／図書館本／〇〇レンタル）→ 手に入れた方法
+function sourceFromTag(tag) {
+  if (/図書館/.test(tag)) return '図書館';
+  if (/自宅|購入|買/.test(tag)) return '購入';
+  if (/レンタル|借り/.test(tag)) return '借りた';
+  if (/もらっ|頂/.test(tag)) return 'もらった';
+  return 'その他';
+}
+
+function bibliaToBook(r, base, i) {
+  const [title, , author, , , isbn, pickedRaw, tagRaw, memoRaw, cover] = r.map(c => (c || '').trim());
+  const tagLines = tagRaw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const memo = memoRaw.replace(/\r\n?/g, '\n');
+  // 感想に「難解」「むずかしかった」などがあれば、むずかしかったボックスへ
+  const hard = /難解|難しかった|むずかしかった|読み進められ|挫折/.test(memo);
+  const status = hard ? 'hard' : memo ? 'done' : 'unread';
+  const extra = tagLines.slice(1).join(' / ');
+  return {
+    id: uid(), createdAt: base - i, updatedAt: base,
+    title, author, isbn: normIsbn(isbn),
+    cover: cover.replace(/_ex=\d+x\d+/, '_ex=400x400'),
+    genre: guessGenre(title),
+    source: tagLines.length ? sourceFromTag(tagLines[0]) : 'その他',
+    status,
+    pickedAt: (pickedRaw.match(/^\d{4}\/\d{2}\/\d{2}/) || [''])[0].replaceAll('/', '-'),
+    finishedAt: '',
+    pickMemo: extra ? `ビブリアのタグ：${tagLines.join(' / ')}` : '',
+    review: memo, rating: 0, clips: [],
+    importedFrom: 'biblia',
+  };
+}
+
+async function importBiblia(rows) {
+  const have = new Set(books.flatMap(b => [b.isbn && `i:${b.isbn}`, `t:${b.title}`]).filter(Boolean));
+  const base = Date.now();
+  let added = 0, skipped = 0;
+  for (const [i, r] of rows.entries()) {
+    const b = bibliaToBook(r, base, i);
+    if (!b.title || have.has(`t:${b.title}`) || (b.isbn && have.has(`i:${b.isbn}`))) { skipped++; continue; }
+    await db.putBook(b); upsertLocal(b);
+    have.add(`t:${b.title}`); if (b.isbn) have.add(`i:${b.isbn}`);
+    added++;
+  }
+  renderShelves();
+  toast(`ビブリアから${added}冊を読み込みました${skipped ? `（${skipped}冊は登録済みのためスキップ）` : ''}`);
+}
+
 $('#import-file').addEventListener('change', async e => {
   const file = e.target.files[0];
   e.target.value = '';
   if (!file) return;
   try {
-    const data = JSON.parse(await file.text());
+    const text = await file.text();
+    if (!text.trim().startsWith('{')) {
+      const rows = parseCSV(text);
+      if (!looksLikeBiblia(rows)) throw new Error();
+      await importBiblia(rows);
+      $('#dlg-settings').open && $('#dlg-settings').close();
+      return;
+    }
+    const data = JSON.parse(text);
     if (!Array.isArray(data.books)) throw new Error();
     for (const g of data.genres || []) if (!genres.includes(g)) genres.push(g);
     await db.setMeta('genres', genres);

@@ -270,9 +270,10 @@
         <button type="button" class="btn ghost" id="btn-export">書き出す（JSON）</button>
         <label class="btn ghost">
           読み込む
-          <input type="file" accept="application/json,.json" id="import-file" hidden>
+          <input type="file" accept="application/json,.json,text/csv,.csv" id="import-file" hidden>
         </label>
       </div>
+      <p class="hint" style="margin-top:8px">「読み込む」では、Yonda!のバックアップ（JSON）のほか、読書管理ビブリアのバックアップ（books.csv）も選べます。同じ本は二重に登録されません。</p>
 
       <h3>サンプル</h3>
       <div class="lookup-row">
