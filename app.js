@@ -20,7 +20,7 @@ const HARD_BOX = 'むずかしかったボックス';
 const SOURCES = ['購入', '図書館', 'レンタル', '借りた', 'もらった', 'その他'];
 const DEFAULT_GENRES = ['子育て', '生成AI', 'ビジネス', '小説'];
 const NO_GENRE = '未分類';
-const SPINE_COLORS = ['#7a4b3a', '#3f5d6b', '#5b6b3f', '#7b5a2a', '#5a3f6b', '#2f5d55', '#8a3b3b', '#44506e', '#6b5b3f'];
+const SPINE_COLORS = ['#b8653a', '#4f7f5c', '#4a7394', '#a8792a', '#7d62a0', '#3a7f76', '#b45252', '#56679a', '#8c6d45'];
 
 /* ================= IndexedDB ================= */
 const db = (() => {
@@ -71,6 +71,8 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const today = () => new Date().toLocaleDateString('sv-SE');
 const statusOf = id => STATUSES.find(s => s.id === id) || STATUSES[0];
 const fmtDate = d => d ? d.replaceAll('-', '/') : '';
+// 本好きのリス（index.html の <symbol>）。pose: read=読んでいる / hug=本をだっこ
+const squirrel = (pose = 'read') => `<svg class="squirrel" viewBox="0 0 100 100" aria-hidden="true"><use href="#sq-${pose}"/></svg>`;
 
 function hashColor(str) {
   let h = 0;
@@ -219,6 +221,7 @@ function renderShelves() {
   if (!books.length) {
     main.innerHTML = `
       <div class="welcome">
+        ${squirrel('read')}
         <h2>本棚はまだ空っぽです</h2>
         <p>気になった本を手に取ったら「本を登録」から記録しましょう。</p>
         <div class="lookup-row">
@@ -252,12 +255,12 @@ function renderShelves() {
   if (hard.length) {
     html.push(`
       <section class="shelf hard-box">
-        <div class="shelf-head"><h2>📦 ${HARD_BOX}</h2><span class="count">${hard.length}冊</span></div>
+        <div class="shelf-head">${squirrel('hug')}<h2>${HARD_BOX}</h2><span class="count">${hard.length}冊</span></div>
         <p class="box-note">読み進められなかった本も、手に取った大事な記録。いつかまた開く日のために。</p>
         <div class="shelf-row">${hard.map(bookTile).join('')}</div>
       </section>`);
   }
-  main.innerHTML = html.join('') || `<div class="welcome"><p>条件に合う本が見つかりませんでした。</p></div>`;
+  main.innerHTML = html.join('') || `<div class="welcome">${squirrel('read')}<p>条件に合う本が見つかりませんでした。</p></div>`;
 }
 
 function bookTile(b) {
@@ -959,7 +962,7 @@ function moodBars(counts) {
 function renderInsights() {
   const root = $('#view-insights');
   if (!books.length) {
-    root.innerHTML = `<div class="welcome"><h2>まだふりかえる本がありません</h2><p>本を登録して、気持ちや感想を書きためていくと、ここにあなたの読書の傾向があらわれます。</p></div>`;
+    root.innerHTML = `<div class="welcome">${squirrel('hug')}<h2>まだふりかえる本がありません</h2><p>本を登録して、気持ちや感想を書きためていくと、ここにあなたの読書の傾向があらわれます。</p></div>`;
     return;
   }
   const st = computeStats();
