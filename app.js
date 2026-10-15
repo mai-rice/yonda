@@ -1289,13 +1289,107 @@ $('#btn-daily-open').addEventListener('click', () => {
   if (item.bookId) openDetail(item.bookId);
 });
 
-// 1日1回、開いたときに自動で出す
+/* ================= 今日の一冊 ================= */
+// 「まだ読んでない」「途中でひと休み」の本から、1日1冊をランダムにおすすめする
+const pickCandidates = () => books.filter(b => b.status === 'unread' || b.status === 'tsundoku');
+let pickId = null;
+
+function randomPick(excludeId) {
+  const list = pickCandidates();
+  const others = list.filter(b => b.id !== excludeId);
+  const from = others.length ? others : list;
+  return from.length ? from[Math.floor(Math.random() * from.length)] : null;
+}
+
+// 今日の一冊を決める（同じ日は同じ本。前の日と同じ本はなるべく避ける）
+async function todaysPick() {
+  const list = pickCandidates();
+  let saved = null;
+  try { saved = await db.getMeta('pickOfDay'); } catch { /* 保存できない環境 */ }
+  if (saved?.date === today() && list.some(b => b.id === saved.id)) return books.find(b => b.id === saved.id);
+  const b = randomPick(saved?.id);
+  if (b) { try { await db.setMeta('pickOfDay', { date: today(), id: b.id }); } catch { /* 表示はする */ } }
+  return b;
+}
+
+function pickMessage(b) {
+  const d = b.pickedAt ? daysBetween(b.pickedAt, today()) : 0;
+  const lib = b.source === '図書館' || b.source === 'レンタル' || b.source === '借りた';
+  if (b.status === 'tsundoku') {
+    return `途中でひと休みしている本です。前のところから、5ページだけ続きをどうですか？${lib ? '返す前に、もうひと押し。' : ''}`;
+  }
+  return `${d >= 1 ? `手に取って${d}日。` : ''}最初の1ページ、のぞいてみませんか？${lib ? '借りている本なので、返す前に少しだけでも。' : ''}`;
+}
+
+function renderPick() {
+  const b = books.find(x => x.id === pickId);
+  $('#pick-date').textContent = new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
+  if (!b) {
+    $('#pick-body').innerHTML = `<p class="pick-msg">「まだ読んでない」「途中でひと休み」の本がありません。今は読みたい本を読みきれているようです。</p>`;
+    ['#btn-pick-next', '#btn-pick-open', '#btn-pick-start'].forEach(s => $(s).hidden = true);
+    return;
+  }
+  const st = statusOf(b.status);
+  const src = sourceInfo(b.source);
+  $('#pick-body').innerHTML = `
+    <div class="pick">
+      <div class="pick-cover">${coverHTML(b)}</div>
+      <div class="pick-info">
+        <p class="pick-lead">リスのおすすめ</p>
+        <h3 class="pick-title">${esc(b.title)}</h3>
+        ${b.author ? `<p class="pick-author">${esc(b.author)}</p>` : ''}
+        <p class="pick-tags">
+          <span class="pick-st" style="background:${st.color}">${st.label}</span>
+          ${src.mark ? `<span class="place-mark ${src.cls}">${src.label}</span>` : ''}
+        </p>
+      </div>
+    </div>
+    <p class="pick-msg">${esc(pickMessage(b))}</p>
+    ${b.pickMemo ? `<p class="daily-from">手に取ったときは「${esc(b.pickMemo.slice(0, 80))}${b.pickMemo.length > 80 ? '…' : ''}」</p>` : ''}`;
+  $('#btn-pick-next').hidden = pickCandidates().length < 2;
+  $('#btn-pick-open').hidden = false;
+  $('#btn-pick-start').hidden = false;
+  $('#btn-pick-start').textContent = b.status === 'tsundoku' ? '続きを読む' : '読み始める';
+}
+
+async function openPick() {
+  pickId = (await todaysPick())?.id || null;
+  renderPick();
+  $('#dlg-pick').showModal();
+}
+$('#btn-pick').addEventListener('click', openPick);
+$('#btn-pick-next').addEventListener('click', async () => {
+  const b = randomPick(pickId);
+  if (!b) return;
+  pickId = b.id;
+  try { await db.setMeta('pickOfDay', { date: today(), id: b.id }); } catch { /* 表示はする */ }
+  renderPick();
+});
+$('#btn-pick-open').addEventListener('click', () => {
+  $('#dlg-pick').close();
+  if (pickId) openDetail(pickId);
+});
+$('#btn-pick-start').addEventListener('click', async () => {
+  const b = books.find(x => x.id === pickId);
+  if (!b) return;
+  b.status = 'reading';
+  b.updatedAt = Date.now();
+  await db.putBook(b);
+  $('#dlg-pick').close();
+  renderShelves();
+  toast(`『${b.title.slice(0, 20)}${b.title.length > 20 ? '…' : ''}』を「読んでいる」にしました。いってらっしゃい！`);
+});
+
+// 1日1回、その日はじめて開いたときに自動で出す
+// （「まだ読んでない」「途中でひと休み」の本があれば今日の一冊、なければ今日のひとこと）
 async function maybeShowDaily() {
   try {
     if ((await db.getMeta('dailyShown')) === today()) return;
-    await db.setMeta('dailyShown', today());
   } catch { /* 保存できなくても表示はする */ }
-  setTimeout(openDaily, 400);
+  const [open, dlg] = pickCandidates().length ? [openPick, '#dlg-pick'] : [openDaily, '#dlg-daily'];
+  // 自分で閉じたときに「今日は見た」とする（途中で読み込み直しが入っても、もう一度出せるように）
+  $(dlg).addEventListener('close', () => db.setMeta('dailyShown', today()).catch(() => {}), { once: true });
+  setTimeout(open, 400);
 }
 
 /* ================= 全体のイベント ================= */
@@ -1347,7 +1441,8 @@ const DEMO = !!window.YONDA_DEMO;
     const hadController = !!navigator.serviceWorker.controller;
     let reloaded = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!hadController || reloaded) return;
+      // 何か画面を開いている最中なら読み込み直さない（次に開いたときに新しい版になる）
+      if (!hadController || reloaded || document.querySelector('dialog[open]')) return;
       reloaded = true;
       location.reload();
     });

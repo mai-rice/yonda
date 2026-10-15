@@ -1,5 +1,5 @@
 // アプリ本体をキャッシュしてオフラインでも開けるようにする
-const CACHE = 'yonda-v8';
+const CACHE = 'yonda-v9';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.json', 'icon.svg'];
 
 self.addEventListener('install', e => {

@@ -490,7 +490,22 @@ dialog.daily[open] .daily-card { animation: pop .4s cubic-bezier(.2, .9, .3, 1.3
 }
 .daily-from { margin: 10px 0 0; color: var(--ink-soft); font-size: .82rem; }
 .daily-photo { margin-top: 10px; max-height: 180px; width: auto; border-radius: 10px; border: 1.5px solid var(--draw); }
-.daily-foot { display: flex; align-items: center; gap: 6px; padding-top: 6px; }
+.daily-foot { display: flex; align-items: center; gap: 6px; padding-top: 6px; flex-wrap: wrap; }
+
+/* 今日の一冊 */
+.pick-card { background-image: none; }
+.pick { display: flex; gap: 14px; align-items: flex-start; }
+.pick-cover { width: 84px; height: 122px; flex: none; }
+.pick-cover img, .pick-cover .spine { width: 100%; height: 100%; object-fit: cover; border-radius: 4px 7px 7px 4px; border: 2px solid var(--draw); box-shadow: var(--shadow); }
+.pick-cover .spine { font-size: .8rem; }
+.pick-info { min-width: 0; }
+.pick-lead { margin: 0; font-size: .75rem; font-weight: 700; color: var(--accent); }
+.pick-title { font-family: var(--font-title); font-weight: 500; font-size: 1.1rem; line-height: 1.45; margin: 2px 0 0; overflow-wrap: anywhere; }
+.pick-author { margin: 2px 0 0; font-size: .82rem; color: var(--ink-soft); }
+.pick-tags { margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.pick-tags .place-mark { position: static; font-size: .72rem; padding: 0 8px; }
+.pick-st { color: #fff; font-size: .72rem; font-weight: 700; padding: 0 8px; border: 1.5px solid var(--draw); border-radius: 8px 6px 9px 5px; }
+.pick-msg { font-family: var(--font-title); font-weight: 500; font-size: 1.02rem; line-height: 1.7; margin: 14px 0 0; }
 
 /* ---------- ふりかえり ---------- */
 #view-insights { max-width: 760px; margin: 0 auto; padding: 8px 16px 24px; display: grid; gap: 16px; }
