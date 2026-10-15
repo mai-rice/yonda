@@ -115,7 +115,15 @@ img { display: block; max-width: 100%; }
 }
 .brand h1 span { color: var(--accent); }
 .tagline { margin: 2px 0 0; font-size: .74rem; color: var(--ink-soft); white-space: nowrap; }
+.brand { min-width: 0; }
+.header-actions { flex: none; }
 @media (max-width: 420px) { .tagline { display: none; } }
+/* 狭い画面（iPhone SE や「画面表示の拡大」）でも設定ボタンが画面からはみ出さないように */
+@media (max-width: 400px) {
+  #btn-add-top { display: none; }   /* 右下の「本を登録」ボタンがあるので */
+  .brand .squirrel { width: 44px; height: 44px; }
+  .brand h1 { font-size: 1.65rem; }
+}
 
 .toolbar { max-width: 1100px; margin: 0 auto; padding: 8px 16px 4px; }
 #search {
