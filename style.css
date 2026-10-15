@@ -280,7 +280,8 @@ dialog.sheet {
   border-radius: 24px 20px 26px 22px; box-shadow: var(--shadow);
 }
 dialog.sheet[open] { display: flex; flex-direction: column; }
-dialog.sheet > form { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+/* 縦並びのflexで flex:1（基準0）を使うと、iPhoneのSafariでは中身が高さ0につぶれるので 1 1 auto にする */
+dialog.sheet > form { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
 dialog::backdrop { background: rgba(60, 40, 20, .45); }
 /* スマホ：画面の下にくっつけると、iPhoneのSafariのツールバーやホームバーの裏に隠れて押せなくなるので、
    見えている範囲（dvh）の中央に、左右に少し余白をあけて出す */
@@ -302,7 +303,8 @@ dialog::backdrop { background: rgba(60, 40, 20, .45); }
   padding: 12px 8px 8px 20px; border-bottom: 2px dashed var(--line);
 }
 .sheet-head h2 { margin: 0; font-family: var(--font-title); font-weight: 500; font-size: 1.1rem; }
-.sheet-body { padding: 16px 20px; overflow-y: auto; flex: 1; min-height: 0; }
+.sheet-body { padding: 16px 20px; overflow-y: auto; flex: 1 1 auto; min-height: 0; -webkit-overflow-scrolling: touch; }
+.sheet-head, .sheet-foot { flex: none; }
 .sheet-body h3 { font-size: .95rem; margin: 18px 0 8px; }
 .sheet-body h3:first-child { margin-top: 0; }
 .sheet-foot {
