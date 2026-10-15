@@ -1341,6 +1341,14 @@ const DEMO = !!window.YONDA_DEMO;
   renderShelves();
   if (books.length) maybeShowDaily();
   if (!DEMO && 'serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then(reg => reg.update()).catch(() => {});
+    // 新しい版に入れ替わったら、一度だけ読み込み直して最新の画面にする
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloaded) return;
+      reloaded = true;
+      location.reload();
+    });
   }
 })();
