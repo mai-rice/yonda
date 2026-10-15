@@ -9,9 +9,10 @@ if (typeof HTMLDialogElement === 'undefined' || !HTMLDialogElement.prototype.sho
 
 /* ================= 定数 ================= */
 const STATUSES = [
-  { id: 'unread',   label: '読み始めてない', short: '未読',   color: 'var(--st-unread)' },
+  // id は以前の記録と合わせるため変えない（tsundoku = 途中でひと休み）
+  { id: 'unread',   label: 'まだ読んでない', short: '積読',   color: 'var(--st-unread)' },
   { id: 'reading',  label: '読んでいる',     short: '読書中', color: 'var(--st-reading)' },
-  { id: 'tsundoku', label: '積んどく中',     short: '積読',   color: 'var(--st-tsundoku)' },
+  { id: 'tsundoku', label: '途中でひと休み', short: '休憩中', color: 'var(--st-tsundoku)' },
   { id: 'done',     label: '読み終わり',     short: '読了',   color: 'var(--st-done)' },
   { id: 'hard',     label: 'むずかしかった', short: '難しい', color: 'var(--st-hard)' },
 ];
@@ -948,10 +949,10 @@ function buildNotes(st) {
     const byRate = [...comparable].sort((a, b) => b[1].done / b[1].total - a[1].done / a[1].total);
     const [hi, lo] = [byRate[0], byRate[byRate.length - 1]];
     if (hi[1].done / hi[1].total > lo[1].done / lo[1].total) {
-      notes.push(`「${hi[0]}」は最後まで読みきる率が高く（${pct(hi[1].done, hi[1].total)}%）、「${lo[0]}」は途中や未読のままになりやすいようです（読了${pct(lo[1].done, lo[1].total)}%）。`);
+      notes.push(`「${hi[0]}」は最後まで読みきる率が高く（${pct(hi[1].done, hi[1].total)}%）、「${lo[0]}」は途中やまだ読んでないままになりやすいようです（読了${pct(lo[1].done, lo[1].total)}%）。`);
     }
   }
-  if (total >= 4 && open / total >= 0.5) notes.push(`手に取った本の${pct(open, total)}%がまだ未読か途中。読みたい気持ちが先に走るタイプかもしれません。`);
+  if (total >= 4 && open / total >= 0.5) notes.push(`手に取った本の${pct(open, total)}%がまだ読んでないか、途中でひと休み中。読みたい気持ちが先に走るタイプかもしれません。`);
   else if (total >= 4 && done / total >= 0.6) notes.push(`手に取った本の${pct(done, total)}%を読み終えています。決めた本はきちんと読みきるタイプのようです。`);
   if (hard) {
     const [hg, hn] = hardByGenre[0];
@@ -1078,7 +1079,7 @@ function renderInsights() {
       <div class="ins-stats">
         <div class="ins-stat"><b>${st.total}</b><span>手に取った本</span></div>
         <div class="ins-stat"><b>${st.done}</b><span>読み終わり</span></div>
-        <div class="ins-stat"><b>${st.open}</b><span>未読・積んどく</span></div>
+        <div class="ins-stat"><b>${st.open}</b><span>まだ・ひと休み中</span></div>
         ${st.hard ? `<div class="ins-stat"><b>${st.hard}</b><span>むずかしかった</span></div>` : ''}
         <div class="ins-stat"><b>${st.clips}</b><span>気になったページ</span></div>
       </div>
@@ -1245,7 +1246,7 @@ function buildDailyPool() {
     if ((b.status === 'tsundoku' || b.status === 'unread') && b.pickedAt) {
       const d = daysBetween(b.pickedAt, t);
       if (d >= 7) pool.push({
-        text: b.status === 'tsundoku' ? `『${b.title}』を積んで${d}日。今日は5ページだけ開いてみませんか？` : `『${b.title}』を手に取って${d}日。最初の1ページ、のぞいてみませんか？`,
+        text: b.status === 'tsundoku' ? `『${b.title}』をひと休みして${d}日。今日は続きを5ページだけ、開いてみませんか？` : `『${b.title}』を手に取って${d}日。最初の1ページ、のぞいてみませんか？`,
         from: b.pickMemo ? `手に取ったときは「${b.pickMemo.slice(0, 40)}${b.pickMemo.length > 40 ? '…' : ''}」` : '本棚からのおたより', bookId: b.id, w: 1,
       });
     }
