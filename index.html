@@ -117,7 +117,7 @@
           <div class="lookup-row small">
             <label class="btn ghost" id="btn-barcode" hidden>
               📷 バーコードを撮影
-              <input type="file" accept="image/*" capture="environment" id="barcode-file" hidden>
+              <input type="file" accept="image/*" capture="environment" id="barcode-file" class="file-input">
             </label>
             <span class="lookup-msg" id="lookup-msg"></span>
           </div>
@@ -129,7 +129,7 @@
           <div class="cover-actions">
             <label class="btn ghost">
               書影を撮る・選ぶ
-              <input type="file" accept="image/*" id="cover-file" hidden>
+              <input type="file" accept="image/*" id="cover-file" class="file-input">
             </label>
             <button type="button" class="btn text" id="btn-cover-clear">書影を外す</button>
           </div>
@@ -216,13 +216,13 @@
           <label class="clip-shoot">
             <span class="clip-shoot-icon">📷</span>
             <span>ページを写メで撮る</span>
-            <input type="file" accept="image/*" capture="environment" id="clip-camera" hidden>
+            <input type="file" accept="image/*" capture="environment" id="clip-camera" class="file-input">
           </label>
         </div>
         <div class="cover-actions">
           <label class="btn ghost">
             アルバムから選ぶ
-            <input type="file" accept="image/*" id="clip-file" hidden>
+            <input type="file" accept="image/*" id="clip-file" class="file-input">
           </label>
           <button type="button" class="btn text" id="btn-clip-photo-clear" hidden>写真を外す</button>
         </div>
@@ -257,23 +257,23 @@
       <button type="button" class="icon-btn" data-close aria-label="閉じる">✕</button>
     </div>
     <div class="sheet-body">
+      <h3>バックアップ・引き継ぎ</h3>
+      <p class="hint">記録はこの端末のブラウザ内に保存されています。機種変更やブラウザのデータ削除に備えて、ときどき書き出しておくと安心です。</p>
+      <div class="lookup-row">
+        <button type="button" class="btn ghost" id="btn-export">書き出す（JSON）</button>
+        <label class="btn ghost">
+          読み込む
+          <input type="file" accept="application/json,.json,text/csv,.csv" id="import-file" class="file-input">
+        </label>
+      </div>
+      <p class="hint" style="margin-top:8px">「読み込む」では、Yonda!のバックアップ（JSON）のほか、読書管理ビブリアのバックアップ（books.csv）も選べます。同じ本は二重に登録されません。</p>
+
       <h3>ジャンル（本棚の並び順）</h3>
       <ul class="genre-list" id="genre-list"></ul>
       <form class="lookup-row" id="genre-add-form">
         <input id="new-genre" placeholder="新しいジャンル名">
         <button class="btn">追加</button>
       </form>
-
-      <h3>バックアップ</h3>
-      <p class="hint">記録はこの端末のブラウザ内に保存されています。機種変更やブラウザのデータ削除に備えて、ときどき書き出しておくと安心です。</p>
-      <div class="lookup-row">
-        <button type="button" class="btn ghost" id="btn-export">書き出す（JSON）</button>
-        <label class="btn ghost">
-          読み込む
-          <input type="file" accept="application/json,.json,text/csv,.csv" id="import-file" hidden>
-        </label>
-      </div>
-      <p class="hint" style="margin-top:8px">「読み込む」では、Yonda!のバックアップ（JSON）のほか、読書管理ビブリアのバックアップ（books.csv）も選べます。同じ本は二重に登録されません。</p>
 
       <h3>サンプル</h3>
       <div class="lookup-row">
