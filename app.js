@@ -1360,6 +1360,47 @@ ${recordsForAI()}`;
   }
 }
 
+/* ================= ご機嫌ノートとの連携 ================= */
+// ご機嫌ノートの「Yonda!で本をえらぶ」から、前日の点数と段階だけが #gokigen=…&score=…&date=… で届く。
+// 記録の中身は受け取らない。届いたのが前日分のときだけ、その日のおすすめに使う。
+const GOKIGEN_LEVELS = {
+  genki: { label: '元気', text: '調子がよさそう。積んでいる本や、むずかしかった本に挑戦する日にも。' },
+  futsu: { label: 'ふつう', text: 'いつものペースで、続きを少しだけ。' },
+  tsukare: { label: 'おつかれ', text: '今日はやさしめに。前に心に残ったことばや、好きだった本をどうぞ。' },
+};
+let gokigen = null;
+
+function readGokigenHash() {
+  if (!location.hash.startsWith('#gokigen=')) return null;
+  const p = new URLSearchParams(location.hash.slice(1));
+  history.replaceState(null, '', location.pathname + location.search);
+  const level = p.get('gokigen'), score = Number(p.get('score')), date = p.get('date') || '';
+  if (!GOKIGEN_LEVELS[level] || !Number.isInteger(score) || score < 0 || score > 100 || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  if (daysBetween(date, today()) !== 1) return null;
+  return { level, score, date };
+}
+
+async function loadGokigen() {
+  const fromLink = readGokigenHash();
+  if (fromLink) {
+    gokigen = fromLink;
+    try { await db.setMeta('gokigen', { ...fromLink, receivedOn: today() }); } catch { /* 今回の表示には使う */ }
+    return true;
+  }
+  let saved = null;
+  try { saved = await db.getMeta('gokigen'); } catch { /* 保存できない環境 */ }
+  gokigen = saved;
+  return false;
+}
+
+// 日付をまたいで開いたままでも、前日分の点数だけを使う
+const moodLevel = () => gokigen && daysBetween(gokigen.date, today()) === 1 ? gokigen.level : null;
+function moodNote() {
+  const level = moodLevel();
+  if (!level) return '';
+  return `<p class="mood-note">昨日のご機嫌 <b>${gokigen.score}点</b>（${GOKIGEN_LEVELS[level].label}）　${GOKIGEN_LEVELS[level].text}</p>`;
+}
+
 /* ================= 今日のひとこと ================= */
 let dailyItems = [];
 let dailyIndex = 0;
@@ -1376,15 +1417,15 @@ function buildDailyPool() {
       const d = daysBetween(b.pickedAt, t);
       pool.push({ text: b.pickMemo, from: `${d > 0 ? `${d}日前、` : '今日、'}『${b.title}』を手に取ったあなた`, bookId: b.id, w: 2 });
     }
-    if (b.status === 'hard' && b.pickedAt && daysBetween(b.pickedAt, t) >= 30) pool.push({
+    if (b.status === 'hard' && b.pickedAt && daysBetween(b.pickedAt, t) >= (moodLevel() === 'genki' ? 14 : 30)) pool.push({
       text: `${HARD_BOX}の『${b.title}』。あれから少し経ちました。いまなら、すこし読めるかもしれません。`,
-      from: '本棚からのおたより', bookId: b.id, w: 1,
+      from: '本棚からのおたより', bookId: b.id, w: 1, nudge: 'hard',
     });
     if ((b.status === 'tsundoku' || b.status === 'unread') && b.pickedAt) {
       const d = daysBetween(b.pickedAt, t);
       if (d >= 7) pool.push({
         text: b.status === 'tsundoku' ? `『${b.title}』をひと休みして${d}日。今日は続きを5ページだけ、開いてみませんか？` : `『${b.title}』を手に取って${d}日。最初の1ページ、のぞいてみませんか？`,
-        from: b.pickMemo ? `手に取ったときは「${b.pickMemo.slice(0, 40)}${b.pickMemo.length > 40 ? '…' : ''}」` : '本棚からのおたより', bookId: b.id, w: 1,
+        from: b.pickMemo ? `手に取ったときは「${b.pickMemo.slice(0, 40)}${b.pickMemo.length > 40 ? '…' : ''}」` : '本棚からのおたより', bookId: b.id, w: 1, nudge: 'open',
       });
     }
   }
@@ -1395,6 +1436,20 @@ function buildDailyPool() {
       { text: 'そのとき手に取った理由は、そのときにしか書けません。', from: 'Yonda! より' },
     );
   }
+  // ご機嫌ノートの点数があれば、おつかれの日は心に残ったことばを多めに、挑戦のおさそいは控えめにする
+  const level = moodLevel();
+  if (level) {
+    for (const p of pool) {
+      const b = books.find(x => x.id === p.bookId);
+      if (level === 'tsukare') {
+        if (p.nudge) p.w = 0;
+        else if (b?.rating >= 4) p.w = (p.w || 1) * 2;
+      }
+      if (level === 'genki' && p.nudge === 'hard') p.w = 4;
+    }
+  }
+  const usable = pool.filter(p => p.w !== 0);
+  if (usable.length) pool.splice(0, pool.length, ...usable);
   // 日付で決まる順番に並べる（同じ日は同じひとことから始まる）
   let seed = [...t].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
   const rand = () => (seed = (seed * 1103515245 + 12345) >>> 0) / 2 ** 32;
@@ -1404,7 +1459,7 @@ function buildDailyPool() {
 function renderDaily() {
   const item = dailyItems[dailyIndex % dailyItems.length];
   $('#daily-date').textContent = new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
-  $('#daily-body').innerHTML = `
+  $('#daily-body').innerHTML = `${moodNote()}
     <p class="daily-quote">${esc(item.text)}</p>
     ${item.photo ? `<img class="daily-photo" src="${item.photo}" alt="記録したページの写真">` : ''}
     <p class="daily-from">— ${esc(item.from)}</p>`;
@@ -1428,7 +1483,17 @@ $('#btn-daily-open').addEventListener('click', () => {
 
 /* ================= 今日の一冊 ================= */
 // 「まだ読んでない」「途中でひと休み」の本から、1日1冊をランダムにおすすめする
-const pickCandidates = () => books.filter(b => b.status === 'unread' || b.status === 'tsundoku');
+// ご機嫌ノートの点数があれば：おつかれ→★4以上の読み終わった本と、途中でひと休みの本／元気→むずかしかった本も入れる
+function pickCandidates() {
+  const open = books.filter(b => b.status === 'unread' || b.status === 'tsundoku');
+  const level = moodLevel();
+  if (level === 'tsukare') {
+    const gentle = books.filter(b => (b.status === 'done' && b.rating >= 4) || b.status === 'tsundoku');
+    return gentle.length ? gentle : open;
+  }
+  if (level === 'genki') return [...open, ...books.filter(b => b.status === 'hard')];
+  return open;
+}
 let pickId = null;
 
 function randomPick(excludeId) {
@@ -1450,6 +1515,8 @@ async function todaysPick() {
 }
 
 function pickMessage(b) {
+  if (b.status === 'done') return `★${b.rating}をつけた、読み終わった本です。好きだったところだけ、もう一度ひらいてみませんか？`;
+  if (b.status === 'hard') return `${HARD_BOX}にしまった本です。今日は調子がよさそう。1ページだけ、もう一度挑戦してみませんか？`;
   const d = b.pickedAt ? daysBetween(b.pickedAt, today()) : 0;
   const lib = b.source === '図書館' || b.source === 'レンタル' || b.source === '借りた';
   if (b.status === 'tsundoku') {
@@ -1462,7 +1529,7 @@ function renderPick() {
   const b = books.find(x => x.id === pickId);
   $('#pick-date').textContent = new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
   if (!b) {
-    $('#pick-body').innerHTML = `<p class="pick-msg">「まだ読んでない」「途中でひと休み」の本がありません。今は読みたい本を読みきれているようです。</p>`;
+    $('#pick-body').innerHTML = `<p class="pick-msg">「まだ読んでない」「途中でひと休み」の本がありません。今は読みたい本を読みきれているようです。</p>${moodNote()}`;
     ['#btn-pick-next', '#btn-pick-open', '#btn-pick-start'].forEach(s => $(s).hidden = true);
     return;
   }
@@ -1482,11 +1549,13 @@ function renderPick() {
       </div>
     </div>
     <p class="pick-msg">${esc(pickMessage(b))}</p>
+    ${moodNote()}
     ${b.pickMemo ? `<p class="daily-from">手に取ったときは「${esc(b.pickMemo.slice(0, 80))}${b.pickMemo.length > 80 ? '…' : ''}」</p>` : ''}`;
   $('#btn-pick-next').hidden = pickCandidates().length < 2;
   $('#btn-pick-open').hidden = false;
-  $('#btn-pick-start').hidden = false;
-  $('#btn-pick-start').textContent = b.status === 'tsundoku' ? '続きを読む' : '読み始める';
+  // 読み終わった本は「読んでいる」に戻さない
+  $('#btn-pick-start').hidden = b.status === 'done';
+  $('#btn-pick-start').textContent = b.status === 'tsundoku' ? '続きを読む' : b.status === 'hard' ? 'もう一度挑戦する' : '読み始める';
 }
 
 async function openPick() {
@@ -1519,11 +1588,14 @@ $('#btn-pick-start').addEventListener('click', async () => {
 
 // 1日1回、その日はじめて開いたときに自動で出す
 // （「まだ読んでない」「途中でひと休み」の本があれば今日の一冊、なければ今日のひとこと）
-async function maybeShowDaily() {
-  try {
-    if ((await db.getMeta('dailyShown')) === today()) return;
-  } catch { /* 保存できなくても表示はする */ }
-  const [open, dlg] = pickCandidates().length ? [openPick, '#dlg-pick'] : [openDaily, '#dlg-daily'];
+async function maybeShowDaily(force = false) {
+  if (!force) {
+    try {
+      if ((await db.getMeta('dailyShown')) === today()) return;
+    } catch { /* 保存できなくても表示はする */ }
+  }
+  if (document.querySelector('dialog[open]')) return;
+  const [open, dlg] = pickCandidates().length && moodLevel() !== 'tsukare' ? [openPick, '#dlg-pick'] : [openDaily, '#dlg-daily'];
   // 自分で閉じたときに「今日は見た」とする（途中で読み込み直しが入っても、もう一度出せるように）
   $(dlg).addEventListener('close', () => db.setMeta('dailyShown', today()).catch(() => {}), { once: true });
   setTimeout(open, 400);
@@ -1570,8 +1642,13 @@ const DEMO = !!window.YONDA_DEMO;
     genres = DEFAULT_GENRES.slice();
     toast('このブラウザでは記録を保存できません（プライベートモードなど）');
   }
+  const fromLink = await loadGokigen();
   renderShelves();
-  if (books.length) maybeShowDaily();
+  if (books.length) maybeShowDaily(fromLink);
+  // アプリを開いたままご機嫌ノートのリンクから来たとき
+  window.addEventListener('hashchange', async () => {
+    if (await loadGokigen() && books.length) maybeShowDaily(true);
+  });
   if (!DEMO && 'serviceWorker' in navigator && location.protocol.startsWith('http')) {
     navigator.serviceWorker.register('sw.js').then(reg => reg.update()).catch(() => {});
     // 新しい版に入れ替わったら、一度だけ読み込み直して最新の画面にする
