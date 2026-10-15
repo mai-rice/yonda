@@ -17,7 +17,17 @@ const STATUSES = [
 ];
 // 「むずかしかった」本は、ジャンルの棚ではなく専用のボックスにしまう
 const HARD_BOX = 'むずかしかったボックス';
+// 「どこの本？」 保存する値は以前のまま（購入など）で、画面では「家の本」などと表示する
 const SOURCES = ['購入', '図書館', 'レンタル', '借りた', 'もらった', 'その他'];
+const SOURCE_INFO = {
+  購入:     { label: '家の本',       mark: '家',     cls: 'home' },
+  図書館:   { label: '図書館の本',   mark: '図書館', cls: 'lib' },
+  レンタル: { label: 'レンタルの本', mark: 'レンタル', cls: 'rent' },
+  借りた:   { label: '借りた本',     mark: '借りた', cls: 'rent' },
+  もらった: { label: 'もらった本',   mark: 'もらった', cls: 'home' },
+  その他:   { label: 'その他',       mark: '',       cls: '' },
+};
+const sourceInfo = s => SOURCE_INFO[s] || { label: s || 'その他', mark: '', cls: '' };
 const DEFAULT_GENRES = ['子育て', '生成AI', 'ビジネス', '小説'];
 const NO_GENRE = '未分類';
 const SPINE_COLORS = ['#b8653a', '#4f7f5c', '#4a7394', '#a8792a', '#7d62a0', '#3a7f76', '#b45252', '#56679a', '#8c6d45'];
@@ -200,7 +210,7 @@ async function googleBooks(q) {
 function matches(b) {
   if (filterStatus !== 'all' && b.status !== filterStatus) return false;
   if (!query) return true;
-  const hay = [b.title, b.author, b.pickMemo, b.review, b.genre, b.source, ...(b.clips || []).map(c => c.note)].join(' ').toLowerCase();
+  const hay = [b.title, b.author, b.pickMemo, b.review, b.genre, b.source, sourceInfo(b.source).label, ...(b.clips || []).map(c => c.note)].join(' ').toLowerCase();
   return hay.includes(query.toLowerCase());
 }
 
@@ -266,11 +276,13 @@ function renderShelves() {
 function bookTile(b) {
   const st = statusOf(b.status);
   const n = (b.clips || []).length;
+  const src = sourceInfo(b.source);
   return `
-    <button class="book" data-id="${b.id}" aria-label="${esc(b.title)}（${st.label}）">
+    <button class="book" data-id="${b.id}" aria-label="${esc(b.title)}（${st.label}・${esc(src.label)}）">
       ${coverHTML(b)}
       <span class="ribbon" style="background:${st.color}">${st.short}</span>
       ${n ? `<span class="clip-badge">🔖 ${n}</span>` : ''}
+      ${src.mark ? `<span class="place-mark ${src.cls}">${src.mark}</span>` : ''}
     </button>`;
 }
 
@@ -310,7 +322,7 @@ function renderFormChips() {
     `<button type="button" class="chip" role="radio" aria-checked="${draft.genre === g}" data-genre="${esc(g)}">${esc(g)}</button>`
   ).join('') + `<button type="button" class="chip add" data-genre-new>＋ ジャンルを追加</button>`;
   $('#source-chips').innerHTML = SOURCES.map(s =>
-    `<button type="button" class="chip" role="radio" aria-checked="${draft.source === s}" data-source="${s}">${s}</button>`
+    `<button type="button" class="chip" role="radio" aria-checked="${draft.source === s}" data-source="${s}">${sourceInfo(s).label}</button>`
   ).join('');
   $('#status-chips').innerHTML = STATUSES.map(s =>
     `<button type="button" class="chip" role="radio" aria-checked="${draft.status === s.id}" data-st="${s.id}"><span class="dot" style="background:${s.color}"></span>${s.label}</button>`
@@ -496,9 +508,9 @@ function renderDetail() {
       <div>
         <h3 class="detail-title">${esc(b.title)}</h3>
         <p class="detail-author">${esc(b.author || '作者未入力')}</p>
+        <p class="place-stamp ${sourceInfo(b.source).cls}">${esc(sourceInfo(b.source).label)}</p>
         <div class="meta">
           <span>📚 ${esc(genres.includes(b.genre) ? b.genre : NO_GENRE)}</span>
-          <span>🛒 ${esc(b.source)}</span>
           ${b.pickedAt ? `<span>手に取った日 ${fmtDate(b.pickedAt)}</span>` : ''}
           ${b.finishedAt ? `<span>読了 ${fmtDate(b.finishedAt)}</span>` : ''}
         </div>
@@ -949,7 +961,7 @@ function buildNotes(st) {
   }
   if (avgDays != null) notes.push(`手に取ってから読み終わるまで、平均${avgDays}日。`);
   const [topS, topSn] = bySource[0] || [];
-  if (topS && total >= 3) notes.push(`手に入れ方は「${topS}」がいちばん多め（${pct(topSn, total)}%）。`);
+  if (topS && total >= 3) notes.push(`「${sourceInfo(topS).label}」がいちばん多め（${pct(topSn, total)}%）。`);
   const topRated = ratedByGenre.filter(r => r.n >= 2).sort((a, b) => b.avg - a.avg)[0];
   if (topRated) notes.push(`満足度が高いのは「${topRated.genre}」の本（平均★${topRated.avg.toFixed(1)}）。`);
   const moodTop = Object.entries(moodPick).sort((a, b) => b[1] - a[1])[0];
@@ -1126,8 +1138,8 @@ function renderInsights() {
     </section>
 
     <section class="ins-card">
-      <h2>手に入れた方法</h2>
-      ${barsHTML(st.bySource.map(([s, n]) => ({ label: s, value: n, valText: `${n}冊` })), maxS)}
+      <h2>どこの本？</h2>
+      ${barsHTML(st.bySource.map(([s, n]) => ({ label: sourceInfo(s).label, value: n, valText: `${n}冊` })), maxS)}
     </section>
   `;
   setupAI();
@@ -1152,7 +1164,7 @@ async function setupAI() {
 function recordsForAI() {
   const clip = (s, n = 300) => (s || '').slice(0, n);
   return books.slice(0, 120).map(b => {
-    const lines = [`■『${b.title}』${b.author ? ` ${b.author}` : ''}／ジャンル:${genreOf(b)}／入手:${b.source}／状況:${statusOf(b.status).label}${b.rating ? `／★${b.rating}` : ''}${b.pickedAt ? `／手に取った日:${b.pickedAt}` : ''}${b.finishedAt ? `／読了:${b.finishedAt}` : ''}`];
+    const lines = [`■『${b.title}』${b.author ? ` ${b.author}` : ''}／ジャンル:${genreOf(b)}／どこの本:${sourceInfo(b.source).label}／状況:${statusOf(b.status).label}${b.rating ? `／★${b.rating}` : ''}${b.pickedAt ? `／手に取った日:${b.pickedAt}` : ''}${b.finishedAt ? `／読了:${b.finishedAt}` : ''}`];
     if (b.pickMemo) lines.push(`手に取ったときの気持ち：${clip(b.pickMemo)}`);
     if (b.review) lines.push(`読後の感想：${clip(b.review, 500)}`);
     for (const c of (b.clips || []).filter(c => c.note).slice(0, 8)) lines.push(`気になったページ${c.page ? `(p.${c.page})` : ''}：${clip(c.note, 200)}`);
@@ -1166,7 +1178,7 @@ async function runAI(sample) {
   btn.disabled = true; stop.hidden = false;
   out.textContent = '読み解いています…（30秒ほどかかることがあります）';
   const prompt = `あなたは、ある人の読書記録をいっしょにふりかえる、やさしく率直な聞き手です。
-以下はその人が「手に取った本」の記録です（タイトル、ジャンル、入手方法、読書の状況、手に取ったときの気持ち、読後の感想、気になったページのメモ）。
+以下はその人が「手に取った本」の記録です（タイトル、ジャンル、家の本か図書館の本かなど、読書の状況、手に取ったときの気持ち、読後の感想、気になったページのメモ）。
 
 この記録だけを根拠に、日本語で次の4つを書いてください。
 【関心の流れ】いま何に関心が向いていて、どう移り変わっているか

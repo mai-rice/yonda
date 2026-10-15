@@ -208,6 +208,22 @@ img { display: block; max-width: 100%; }
   background: #fffdf6; color: #4a3826; border-radius: 999px; padding: 0 6px; border: 1px solid #4a3826;
 }
 
+/* どこの本？（家・図書館・借りた…）の印 */
+.place-mark, .place-stamp {
+  border: 1.5px solid #4a3826; color: #4a3826; background: #fffdf6; font-weight: 700;
+}
+.place-mark.home, .place-stamp.home { background: #fbe3b8; }
+.place-mark.lib,  .place-stamp.lib  { background: #cfe4f2; }
+.place-mark.rent, .place-stamp.rent { background: #e4dcf2; }
+.place-mark {
+  position: absolute; bottom: 7px; right: 6px; font-size: .62rem; line-height: 1.5;
+  padding: 0 6px; border-radius: 8px 6px 9px 5px;
+}
+.place-stamp {
+  display: inline-block; margin: 0 0 8px; padding: 1px 12px; font-size: .85rem;
+  border-radius: var(--wobble-s); transform: rotate(-2deg);
+}
+
 .welcome {
   margin: 30px 16px; padding: 22px 20px 26px; text-align: center;
   background: var(--surface); border: 2px solid var(--draw); border-radius: var(--wobble); box-shadow: var(--shadow);
