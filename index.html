@@ -127,17 +127,6 @@
           <ul class="candidates" id="candidates"></ul>
         </section>
 
-        <div class="cover-edit">
-          <div class="cover-preview" id="cover-preview"></div>
-          <div class="cover-actions">
-            <label class="btn ghost">
-              書影を撮る・選ぶ
-              <input type="file" accept="image/*" id="cover-file" class="file-input">
-            </label>
-            <button type="button" class="btn text" id="btn-cover-clear">書影を外す</button>
-          </div>
-        </div>
-
         <label class="field">
           <span class="field-label">タイトル <em>必須</em></span>
           <input name="title" required>
@@ -146,6 +135,23 @@
           <span class="field-label">作者</span>
           <input name="author">
         </label>
+
+        <div class="field">
+          <span class="field-label">書影</span>
+          <div class="cover-edit">
+            <div class="cover-preview" id="cover-preview"></div>
+            <div class="cover-actions">
+              <button type="button" class="btn primary" id="btn-cover-search">ネットで書影を探す</button>
+              <label class="btn ghost">
+                写真で撮る・選ぶ
+                <input type="file" accept="image/*" id="cover-file" class="file-input">
+              </label>
+              <button type="button" class="btn text" id="btn-cover-clear">書影を外す</button>
+            </div>
+          </div>
+          <p class="lookup-msg" id="cover-msg" aria-live="polite"></p>
+          <ul class="cover-results" id="cover-results"></ul>
+        </div>
 
         <div class="field">
           <span class="field-label">ジャンル（本棚）</span>

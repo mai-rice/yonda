@@ -108,7 +108,7 @@ document.addEventListener('error', e => {
 // NDLの書影は画像がないとき1x1を返すことがあるので、小さすぎる画像も差し替える
 document.addEventListener('load', e => {
   const img = e.target;
-  if (img.tagName === 'IMG' && img.hasAttribute('data-fallback') && img.naturalWidth < 10) {
+  if (img.tagName === 'IMG' && img.hasAttribute('data-fallback') && isPlaceholderCover(img)) {
     img.dispatchEvent(new Event('error'));
   }
 }, true);
@@ -144,7 +144,29 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-function resizeImage(file, max) {
+// 暗く写った写真を明るく補正する（明るさの幅を広げて、全体が暗ければ少し持ち上げる）
+function brighten(ctx, w, h) {
+  const im = ctx.getImageData(0, 0, w, h), d = im.data, n = w * h;
+  const hist = new Uint32Array(256);
+  let sum = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    const y = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000 | 0;
+    hist[y]++; sum += y;
+  }
+  const at = p => { let acc = 0; for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= n * p) return v; } return 255; };
+  const lo = at(0.01), hi = at(0.99), mean = sum / n;
+  if (hi - lo < 30) return;
+  const gain = Math.min(2.5, 255 / (hi - lo));
+  // 平均が暗いときだけ、中間の明るさを持ち上げる
+  const m = Math.min(1, Math.max(0.05, ((mean - lo) * gain) / 255));
+  const gamma = m < 0.45 ? Math.max(0.6, Math.log(0.5) / Math.log(m)) : 1;
+  const lut = new Uint8ClampedArray(256);
+  for (let v = 0; v < 256; v++) lut[v] = 255 * Math.pow(Math.min(1, Math.max(0, (v - lo) * gain / 255)), gamma);
+  for (let i = 0; i < d.length; i += 4) { d[i] = lut[d[i]]; d[i + 1] = lut[d[i + 1]]; d[i + 2] = lut[d[i + 2]]; }
+  ctx.putImageData(im, 0, 0);
+}
+
+function resizeImage(file, max, { enhance = false } = {}) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -152,7 +174,9 @@ function resizeImage(file, max) {
       const c = document.createElement('canvas');
       c.width = Math.round(img.width * scale);
       c.height = Math.round(img.height * scale);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      if (enhance) { try { brighten(ctx, c.width, c.height); } catch { /* 補正できなくてもそのまま使う */ } }
       URL.revokeObjectURL(img.src);
       resolve(c.toDataURL('image/jpeg', 0.82));
     };
@@ -166,6 +190,9 @@ const normIsbn = s => s.replace(/[^0-9Xx]/g, '').toUpperCase();
 const looksLikeIsbn = s => /^(97[89]\d{10}|\d{9}[\dX])$/.test(normIsbn(s));
 let netError = false;
 const ndlCover = isbn => `https://ndlsearch.ndl.go.jp/thumbnail/${isbn}.jpg`;
+// Google Books の表紙画像（APIの回数制限とは別。画像がないときは 128×170 の「image not available」が返る）
+const googleCover = isbn => `https://books.google.com/books/content?vid=ISBN${isbn}&printsec=frontcover&img=1&zoom=1&fife=w400-h600`;
+const isPlaceholderCover = img => img.naturalWidth < 10 || (img.naturalWidth === 128 && img.naturalHeight === 170);
 
 function cleanAuthor(a) {
   // openBD は「夏目,漱石,1867-1916」「山田太郎／著 鈴木花子／訳」のような形式
@@ -183,12 +210,12 @@ async function lookupByIsbn(raw) {
     const [hit] = await res.json();
     if (hit && hit.summary) {
       const s = hit.summary;
-      return [{ title: s.title, author: cleanAuthor(s.author), cover: s.cover || ndlCover(isbn), isbn }];
+      return [{ title: s.title, author: cleanAuthor(s.author), cover: s.cover || googleCover(isbn), isbn }];
     }
   } catch { netError = true; }
   // 2) Google Books
   const g = await googleBooks(`isbn:${isbn}`);
-  return g.map(b => ({ ...b, isbn, cover: b.cover || ndlCover(isbn) }));
+  return g.map(b => ({ ...b, isbn, cover: b.cover || googleCover(isbn) }));
 }
 
 async function googleBooks(q) {
@@ -198,12 +225,106 @@ async function googleBooks(q) {
     return (j.items || []).map(it => {
       const v = it.volumeInfo || {};
       const isbn = (v.industryIdentifiers || []).find(x => x.type === 'ISBN_13')?.identifier || '';
-      const thumb = v.imageLinks?.thumbnail?.replace(/^http:/, 'https:') || (isbn ? ndlCover(isbn) : '');
+      const thumb = v.imageLinks?.thumbnail?.replace(/^http:/, 'https:').replace(/&edge=curl/, '') || (isbn ? ndlCover(isbn) : '');
       return { title: [v.title, v.subtitle].filter(Boolean).join(' '), author: (v.authors || []).join('、'), cover: thumb, isbn };
     });
   } catch {
     netError = true;
     return [];
+  }
+}
+
+// openBD の書影をISBNまとめて取る（{isbn: 書影URL}）
+async function openbdCovers(isbns) {
+  const map = {};
+  if (!isbns.length) return map;
+  try {
+    const res = await (await fetch(`https://api.openbd.jp/v1/get?isbn=${isbns.join(',')}`)).json();
+    res.forEach((hit, i) => { if (hit?.summary?.cover) map[isbns[i]] = hit.summary.cover; });
+  } catch { netError = true; }
+  return map;
+}
+
+// 国立国会図書館サーチでタイトル検索（キー不要。日本の本に強い。Google Booksは無料枠が尽きやすいので、こちらを先に使う）
+async function ndlSearch(title, author = '') {
+  const run = async creator => {
+    const p = new URLSearchParams({ title, cnt: '20' });
+    if (creator) p.set('creator', creator);
+    const xml = await (await fetch(`https://ndlsearch.ndl.go.jp/api/opensearch?${p}`)).text();
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    return [...doc.getElementsByTagName('item')].map(it => {
+      const tag = n => it.getElementsByTagName(n)[0]?.textContent || '';
+      const isbnEl = [...it.getElementsByTagName('dc:identifier')].find(x => /ISBN/.test(x.getAttribute('xsi:type') || ''));
+      return {
+        title: tag('title').replace(/\s*:\s*/, ' '),
+        author: cleanAuthor((tag('dc:creator') || tag('author')).replace(/\s*(著|作|編|訳|監修)$/, '')),
+        isbn: isbnEl ? normIsbn(isbnEl.textContent) : '',
+      };
+    });
+  };
+  try {
+    const first = author.split(/[、,\s]/)[0];
+    let items = await run(first);
+    if (!items.length && first) items = await run('');
+    // 同じISBNの重複と、ISBNのない古い版は後ろへ
+    const seen = new Set();
+    items = items.filter(b => !b.isbn || (!seen.has(b.isbn) && seen.add(b.isbn)));
+    items.sort((a, b) => !!b.isbn - !!a.isbn);
+    const covers = await openbdCovers(items.filter(b => b.isbn).map(b => b.isbn).slice(0, 10));
+    return items.slice(0, 8).map(b => ({ ...b, cover: covers[b.isbn] || (b.isbn ? googleCover(b.isbn) : '') }));
+  } catch {
+    netError = true;
+    return [];
+  }
+}
+
+// 書影の候補をネットから集める（ISBNがあればISBNで、なければタイトル・作者で）
+async function findCovers(isbn, title, author) {
+  const urls = [];
+  const add = u => { if (u && !urls.includes(u)) urls.push(u); };
+  if (isbn && looksLikeIsbn(isbn)) {
+    isbn = normIsbn(isbn);
+    try {
+      const [hit] = await (await fetch(`https://api.openbd.jp/v1/get?isbn=${isbn}`)).json();
+      add(hit?.summary?.cover);
+    } catch { /* 次へ */ }
+    add(googleCover(isbn));
+    add(ndlCover(isbn));
+  }
+  if (title) {
+    let hits = await ndlSearch(title, author);
+    if (!hits.length) {
+      const q = `intitle:${title}${author ? ` inauthor:${author.split(/[、,\s]/)[0]}` : ''}`;
+      hits = await googleBooks(q);
+    }
+    for (const b of hits) {
+      if (b.cover) add(b.cover);
+      if (b.isbn) { add(googleCover(b.isbn)); add(ndlCover(b.isbn)); }
+    }
+  }
+  return urls.slice(0, 9);
+}
+
+async function searchCoverForForm() {
+  const btn = $('#btn-cover-search'), box = $('#cover-results'), msg = $('#cover-msg');
+  const title = form.title.value.trim(), isbn = draft.isbn || $('#isbn').value.trim();
+  if (!title && !looksLikeIsbn(isbn)) { msg.textContent = '先にタイトルかISBNを入れてください'; return; }
+  btn.disabled = true;
+  msg.textContent = '書影を探しています…';
+  box.innerHTML = '';
+  try {
+    const urls = await findCovers(isbn, title, form.author.value.trim());
+    if (!urls.length) { msg.textContent = '見つかりませんでした。写真で撮るか、背表紙のままでも大丈夫です。'; return; }
+    msg.textContent = '使う書影をタップしてください';
+    box.innerHTML = urls.map(u => `<li><button type="button" data-cover="${esc(u)}" aria-label="この書影を使う"><img src="${esc(u)}" alt="" loading="lazy"></button></li>`).join('');
+    // 読めない画像や、画像がないときの小さな画像（1×1）は候補から外す
+    box.querySelectorAll('img').forEach(img => {
+      const drop = () => { img.closest('li')?.remove(); if (!box.children.length) msg.textContent = '見つかりませんでした。写真で撮るか、背表紙のままでも大丈夫です。'; };
+      img.addEventListener('error', drop);
+      img.addEventListener('load', () => { if (isPlaceholderCover(img)) drop(); });
+    });
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -311,6 +432,8 @@ function openForm(book = null) {
   $('#isbn').value = book?.isbn || '';
   $('#candidates').innerHTML = '';
   $('#lookup-msg').textContent = '';
+  $('#cover-results').innerHTML = '';
+  $('#cover-msg').textContent = '';
   $('#btn-delete').hidden = !book;
   renderFormChips();
   renderCoverPreview();
@@ -383,7 +506,12 @@ async function doLookup() {
   netError = false;
   $('#candidates').innerHTML = '';
   try {
-    const results = looksLikeIsbn(q) ? await lookupByIsbn(q) : await googleBooks(q);
+    let results;
+    if (looksLikeIsbn(q)) results = await lookupByIsbn(q);
+    else {
+      results = await ndlSearch(q);
+      if (!results.length) results = await googleBooks(q);
+    }
     if (!results.length) {
       $('#lookup-msg').textContent = netError ? '本の検索サービスにつながりませんでした。手入力するか、書影を撮影して登録してください。' : '見つかりませんでした。手入力してください。';
     } else if (results.length === 1 && looksLikeIsbn(q)) {
@@ -442,10 +570,19 @@ $('#cover-file').addEventListener('change', async e => {
   const file = e.target.files[0];
   e.target.value = '';
   if (!file) return;
-  draft.cover = await resizeImage(file, 600);
+  draft.cover = await resizeImage(file, 600, { enhance: true });
   renderCoverPreview();
 });
 $('#btn-cover-clear').addEventListener('click', () => { draft.cover = ''; renderCoverPreview(); });
+$('#btn-cover-search').addEventListener('click', searchCoverForForm);
+$('#cover-results').addEventListener('click', e => {
+  const b = e.target.closest('[data-cover]');
+  if (!b) return;
+  draft.cover = b.dataset.cover;
+  $('#cover-results').innerHTML = '';
+  $('#cover-msg').textContent = '書影を入れました ✓';
+  renderCoverPreview();
+});
 
 form.addEventListener('submit', async e => {
   e.preventDefault();
@@ -609,7 +746,7 @@ async function onClipFile(e) {
   e.target.value = '';
   if (!file) return;
   // 文字が読めるよう、書影より大きめに保存
-  clipPhoto = await resizeImage(file, 1600);
+  clipPhoto = await resizeImage(file, 1600, { enhance: true });
   renderClipPhoto();
   clipForm.page.focus();
 }

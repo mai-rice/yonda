@@ -344,6 +344,15 @@ textarea { resize: vertical; }
 .cover-preview { width: 92px; height: 134px; flex: none; }
 .cover-preview img, .cover-preview .spine { width: 100%; height: 100%; object-fit: cover; border-radius: 4px 7px 7px 4px; border: 2px solid var(--draw); }
 .cover-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.cover-edit { margin-bottom: 4px; }
+#cover-msg { margin: 4px 0 0; }
+#cover-msg:empty { display: none; }
+/* ネットで見つかった書影の候補 */
+.cover-results { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 10px; }
+.cover-results:empty { display: none; }
+.cover-results button { display: block; width: 100%; aspect-ratio: 2 / 3; padding: 0; border: 2px solid var(--draw); border-radius: 4px 7px 7px 4px; background: var(--surface-2); overflow: hidden; cursor: pointer; }
+.cover-results img { width: 100%; height: 100%; object-fit: cover; }
+.cover-results button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
 .stars { display: flex; gap: 2px; margin-bottom: 6px; }
 .stars button {
