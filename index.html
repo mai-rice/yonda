@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Yonda!</title>
+  <meta name="theme-color" content="#f6efe4">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Shippori+Mincho:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <h1>Yonda!</h1>
+      <p class="tagline">手に取った本の、記録と本棚</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn primary small" id="btn-add-top">＋ 登録</button>
+      <button class="icon-btn" id="btn-daily" aria-label="今日のひとこと" title="今日のひとこと">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1.2-4.4A8 8 0 1 1 21 12z"/></svg>
+      </button>
+      <button class="icon-btn" id="btn-settings" aria-label="設定">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="表示の切り替え">
+    <button role="tab" id="tab-shelf" aria-selected="true" data-view="shelf">本棚</button>
+    <button role="tab" id="tab-insights" aria-selected="false" data-view="insights">ふりかえり</button>
+  </nav>
+
+  <div id="view-shelf">
+    <div class="toolbar">
+      <input type="search" id="search" placeholder="タイトル・著者・メモで検索" autocomplete="off">
+      <div class="chips" id="status-filter" role="tablist" aria-label="状況で絞り込み"></div>
+    </div>
+    <main id="shelves" aria-live="polite"></main>
+  </div>
+
+  <main id="view-insights" hidden></main>
+
+  <button class="fab" id="btn-add">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    本を登録
+  </button>
+
+  <!-- 登録・編集 -->
+  <dialog id="dlg-form" class="sheet">
+    <form id="book-form" method="dialog" novalidate>
+      <div class="sheet-head">
+        <h2 id="form-title">本を登録</h2>
+        <button type="button" class="icon-btn" data-close aria-label="閉じる">✕</button>
+      </div>
+
+      <div class="sheet-body">
+        <section class="lookup">
+          <label class="field-label" for="isbn">ISBNやタイトルで探す（任意）</label>
+          <div class="lookup-row">
+            <input id="isbn" name="isbn" inputmode="text" placeholder="ISBN（978…）またはタイトル">
+            <button type="button" class="btn" id="btn-lookup">検索</button>
+          </div>
+          <div class="lookup-row small">
+            <label class="btn ghost" id="btn-barcode" hidden>
+              📷 バーコードを撮影
+              <input type="file" accept="image/*" capture="environment" id="barcode-file" hidden>
+            </label>
+            <span class="lookup-msg" id="lookup-msg"></span>
+          </div>
+          <ul class="candidates" id="candidates"></ul>
+        </section>
+
+        <div class="cover-edit">
+          <div class="cover-preview" id="cover-preview"></div>
+          <div class="cover-actions">
+            <label class="btn ghost">
+              書影を撮る・選ぶ
+              <input type="file" accept="image/*" id="cover-file" hidden>
+            </label>
+            <button type="button" class="btn text" id="btn-cover-clear">書影を外す</button>
+          </div>
+        </div>
+
+        <label class="field">
+          <span class="field-label">タイトル <em>必須</em></span>
+          <input name="title" required>
+        </label>
+        <label class="field">
+          <span class="field-label">作者</span>
+          <input name="author">
+        </label>
+
+        <div class="field">
+          <span class="field-label">ジャンル（本棚）</span>
+          <div class="chips wrap" id="genre-chips"></div>
+        </div>
+
+        <div class="field">
+          <span class="field-label">手に入れた方法</span>
+          <div class="chips wrap" id="source-chips"></div>
+        </div>
+
+        <div class="field">
+          <span class="field-label">今の状況</span>
+          <div class="chips wrap" id="status-chips"></div>
+        </div>
+
+        <div class="two-col">
+          <label class="field">
+            <span class="field-label">手に取った日</span>
+            <input type="date" name="pickedAt">
+          </label>
+          <label class="field" id="finished-field">
+            <span class="field-label">読み終わった日</span>
+            <input type="date" name="finishedAt">
+          </label>
+        </div>
+
+        <label class="field">
+          <span class="field-label">手に取ったときの気持ち</span>
+          <textarea name="pickMemo" rows="3" placeholder="なぜこの本を選んだ？ どんな気分だった？"></textarea>
+        </label>
+
+        <div class="field after-read">
+          <span class="field-label">読んだあとの感想</span>
+          <div class="stars" id="rating" role="radiogroup" aria-label="評価"></div>
+          <textarea name="review" rows="4" placeholder="心に残ったこと、誰かに薦めたいか…"></textarea>
+        </div>
+      </div>
+
+      <div class="sheet-foot">
+        <button type="button" class="btn text danger" id="btn-delete" hidden>削除</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" data-close>キャンセル</button>
+        <button type="submit" class="btn primary" value="save">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 詳細 -->
+  <dialog id="dlg-detail" class="sheet">
+    <div class="sheet-head">
+      <h2>本の記録</h2>
+      <button type="button" class="icon-btn" data-close aria-label="閉じる">✕</button>
+    </div>
+    <div class="sheet-body" id="detail-body"></div>
+    <div class="sheet-foot">
+      <span class="spacer"></span>
+      <button type="button" class="btn primary" id="btn-edit">編集する</button>
+    </div>
+  </dialog>
+
+  <!-- 気になったページ -->
+  <dialog id="dlg-clip" class="sheet">
+    <form id="clip-form" method="dialog" novalidate>
+      <div class="sheet-head">
+        <h2 id="clip-title">気になったページ</h2>
+        <button type="button" class="icon-btn" data-close aria-label="閉じる">✕</button>
+      </div>
+      <div class="sheet-body">
+        <div class="clip-photo" id="clip-photo">
+          <label class="clip-shoot">
+            <span class="clip-shoot-icon">📷</span>
+            <span>ページを写メで撮る</span>
+            <input type="file" accept="image/*" capture="environment" id="clip-camera" hidden>
+          </label>
+        </div>
+        <div class="cover-actions">
+          <label class="btn ghost">
+            アルバムから選ぶ
+            <input type="file" accept="image/*" id="clip-file" hidden>
+          </label>
+          <button type="button" class="btn text" id="btn-clip-photo-clear" hidden>写真を外す</button>
+        </div>
+        <label class="field">
+          <span class="field-label">ページ</span>
+          <input name="page" inputmode="numeric" placeholder="例：128">
+        </label>
+        <label class="field">
+          <span class="field-label">気になったこと・メモ</span>
+          <textarea name="note" rows="3" placeholder="なぜ気になった？ 書き写したい一文など"></textarea>
+        </label>
+      </div>
+      <div class="sheet-foot">
+        <button type="button" class="btn text danger" id="btn-clip-delete" hidden>削除</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" data-close>キャンセル</button>
+        <button type="submit" class="btn primary" value="save">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 写真の拡大 -->
+  <dialog id="dlg-photo" class="photo-viewer">
+    <img id="photo-full" alt="">
+    <button type="button" class="icon-btn" data-close aria-label="閉じる">✕</button>
+  </dialog>
+
+  <!-- 設定 -->
+  <dialog id="dlg-settings" class="sheet">
+    <div class="sheet-head">
+      <h2>設定</h2>
+      <button type="button" class="icon-btn" data-close aria-label="閉じる">✕</button>
+    </div>
+    <div class="sheet-body">
+      <h3>ジャンル（本棚の並び順）</h3>
+      <ul class="genre-list" id="genre-list"></ul>
+      <form class="lookup-row" id="genre-add-form">
+        <input id="new-genre" placeholder="新しいジャンル名">
+        <button class="btn">追加</button>
+      </form>
+
+      <h3>バックアップ</h3>
+      <p class="hint">記録はこの端末のブラウザ内に保存されています。機種変更やブラウザのデータ削除に備えて、ときどき書き出しておくと安心です。</p>
+      <div class="lookup-row">
+        <button type="button" class="btn ghost" id="btn-export">書き出す（JSON）</button>
+        <label class="btn ghost">
+          読み込む
+          <input type="file" accept="application/json,.json" id="import-file" hidden>
+        </label>
+      </div>
+
+      <h3>サンプル</h3>
+      <div class="lookup-row">
+        <button type="button" class="btn ghost" id="btn-sample">サンプルの本を追加</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- 今日のひとこと -->
+  <dialog id="dlg-daily" class="daily">
+    <div class="daily-card">
+      <div class="daily-head">
+        <span class="daily-label">今日のひとこと</span>
+        <span class="daily-date" id="daily-date"></span>
+        <button type="button" class="icon-btn" data-close aria-label="閉じる">✕</button>
+      </div>
+      <div class="daily-body" id="daily-body"></div>
+      <div class="daily-foot">
+        <button type="button" class="btn text" id="btn-daily-next">ほかのひとこと</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn primary" id="btn-daily-open" hidden>この本をひらく</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- 確認・入力 -->
+  <dialog id="dlg-ask" class="sheet ask">
+    <form id="ask-form" novalidate>
+      <div class="sheet-body">
+        <p id="ask-msg"></p>
+        <input id="ask-input" autocomplete="off">
+      </div>
+      <div class="sheet-foot">
+        <span class="spacer"></span>
+        <button type="button" class="btn ghost" data-close>キャンセル</button>
+        <button type="submit" class="btn primary" id="ask-ok">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
