@@ -1626,6 +1626,27 @@ document.querySelectorAll('dialog').forEach(dlg => {
 });
 $('#dlg-detail').addEventListener('close', () => { currentId = null; });
 
+// iPhoneのSafariはキーボードが出ても dvh が縮まず、入力画面がキーボードの裏に隠れるので、
+// 見えている範囲の高さと位置を CSS に渡して、画面をその中に収める
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  const root = document.documentElement;
+  const syncViewport = () => {
+    const kbOpen = window.innerHeight - vv.height > 120;
+    root.classList.toggle('kb-open', kbOpen);
+    root.style.setProperty('--vv-h', `${vv.height}px`);
+    root.style.setProperty('--vv-top', `${vv.offsetTop}px`);
+    // 入力中の欄が見えるところまで、画面の中だけをスクロールする
+    const el = document.activeElement;
+    if (kbOpen && el?.matches('input, textarea') && el.closest('dialog')) {
+      requestAnimationFrame(() => el.scrollIntoView({ block: 'nearest' }));
+    }
+  };
+  vv.addEventListener('resize', syncViewport);
+  vv.addEventListener('scroll', syncViewport);
+  syncViewport();
+}
+
 /* ================= 起動 ================= */
 // お試し版（window.YONDA_DEMO）では、初回にサンプルを並べた状態で開く
 const DEMO = !!window.YONDA_DEMO;

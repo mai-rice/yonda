@@ -295,6 +295,20 @@ dialog::backdrop { background: rgba(60, 40, 20, .45); }
     max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     animation: up .25s cubic-bezier(.2, .9, .3, 1.1);
   }
+  /* キーボードが出ているあいだは、キーボードの上に見えている範囲（app.js が --vv-top / --vv-h を入れる）に収める */
+  .kb-open dialog.sheet {
+    top: calc(var(--vv-top, 0px) + 6px);
+    max-height: calc(var(--vv-h, 100dvh) - 12px);
+    animation: none;
+  }
+  /* 入力中は写真まわりを小さくして、メモ欄を広く使う */
+  .kb-open #dlg-clip .clip-photo:not(:has(img)),
+  .kb-open #dlg-clip .cover-actions { display: none; }
+  .kb-open #dlg-clip .clip-photo { min-height: 0; }
+  .kb-open #dlg-clip .clip-photo img { max-height: 90px; }
+  .kb-open .sheet-head { padding-top: 6px; padding-bottom: 4px; }
+  .kb-open .sheet-body { padding-top: 10px; padding-bottom: 10px; }
+  .kb-open .sheet-foot { padding-top: 6px; padding-bottom: 6px; }
 }
 @keyframes up { from { transform: translateY(40px); opacity: .4; } to { transform: none; opacity: 1; } }
 
